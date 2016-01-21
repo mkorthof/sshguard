@@ -2,11 +2,26 @@ package main
 
 import (
 	"bufio"
+	"io"
 	"log"
 	"os/exec"
 )
 
-func Monitor(files ...string) <-chan string {
+func MonitorReader(rd io.Reader) <-chan string {
+	scanner := bufio.NewScanner(rd)
+	c := make(chan string)
+	go func() {
+		for scanner.Scan() {
+			line := scanner.Text()
+			if len(line) > 0 {
+				c <- line
+			}
+		}
+	}()
+	return c
+}
+
+func MonitorFiles(files ...string) <-chan string {
 	args := append([]string{"-n", "0", "-F"}, files...)
 	cmd := exec.Command("tail", args...)
 	stdout, err := cmd.StdoutPipe()
@@ -24,16 +39,5 @@ func Monitor(files ...string) <-chan string {
 			log.Fatal("could not invoke fallback tail:", err)
 		}
 	}
-
-	scanner := bufio.NewScanner(stdout)
-	c := make(chan string)
-	go func() {
-		for scanner.Scan() {
-			line := scanner.Text()
-			if len(line) > 0 {
-				c <- line
-			}
-		}
-	}()
-	return c
+	return MonitorReader(stdout)
 }

@@ -26,4 +26,5 @@ src/parser/attack_scanner.c
 src/sshg-parser
 src/sshguard
 src/stamp-h1
+sshguard
 ylwrap
