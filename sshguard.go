@@ -19,6 +19,9 @@ type Attacker struct {
 	attacks int
 }
 
+var initialBlock time.Duration
+var threshold int
+
 // initSyslog sets up the standard logger to log to syslog(3).
 func initSyslog() {
 	logger, err := syslog.New(syslog.LOG_INFO|syslog.LOG_AUTH, "sshguard")
@@ -33,7 +36,7 @@ func initSyslog() {
 
 // blockDuration calculates how long to block an attacker for.
 func blockDuration(attacker Attacker) time.Duration {
-	duration := time.Minute * 2
+	duration := initialBlock
 	for i := 0; i < attacker.attacks-1; i++ {
 		duration *= 2
 	}
@@ -60,7 +63,7 @@ func report(attacker *Attacker, blocker fw.Blocker, c chan string) {
 
 	if attacker.blocked {
 		log.Println(attacker.addr, "should already have been blocked")
-	} else if attacker.score >= 30 {
+	} else if attacker.score >= threshold {
 		attacker.attacks += 1
 		attacker.blocked = true
 		go block(attacker.addr, blocker, blockDuration(*attacker), c)
@@ -122,9 +125,13 @@ func initBackend(name string) (b fw.Blocker) {
 }
 
 func parseCmdline() (c <-chan string, b fw.Blocker) {
+	flag.IntVar(&threshold, "a", 30,
+		"Block an address when its dangerousness exceeds `score`.")
 	noDaemon := flag.Bool("d", false,
 		"Do not daemonize. Run in the foreground and log to stderr.")
 	backend := flag.String("f", "none", "Firewall or `backend` to use.")
+	flag.DurationVar(&initialBlock, "p", time.Minute*2,
+		"Block attackers for the given initial `duration`.")
 	version := flag.Bool("v", false, "Print version information and exit.")
 	flag.Usage = usage
 	flag.Parse()
