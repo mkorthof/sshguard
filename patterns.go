@@ -14,9 +14,9 @@ var Patterns = []string{
 	"[Ii]nvalid user " + user + " from " + addr,
 	"User " + user + " from " + addr + " not allowed because",                                     // DenyUsers/DenyGroups on Ubuntu/FreeBSD
 	"Failed .* for " + user + " from " + addr + " port \\d+ ssh",                                  // Ubuntu
-	"error: PAM: [Aa]uthentication (error|failure) for (illegal user)? " + user + " from " + addr, // Debian
+	"error: PAM: [Aa]uthentication (error|failure) for (illegal user )?" + user + " from " + addr, // Debian
 	"Did not receive identification string from " + addr,
-	"(error: )?((Connection (closed|reset) by)|(Received disconnect from)) " + addr + "[: ].*[preauth]",
+	"(error: )?((Connection (closed|reset) by)|(Received disconnect from)) " + addr + "[: ].*\\[preauth\\]",
 	"Bad protocol version identification .* from " + addr,
 
 	// Solaris SSH
