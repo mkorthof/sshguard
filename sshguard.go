@@ -17,6 +17,7 @@ type Attacker struct {
 	blocked bool
 	score   int
 	attacks int
+	times   []int64
 }
 
 var initialBlock time.Duration
@@ -60,14 +61,29 @@ func block(addr string, blocker fw.Blocker, d time.Duration, c chan string) {
 func report(attacker *Attacker, blocker fw.Blocker, c chan string) {
 	score := 10
 	attacker.score += score
+	attacker.times = append(attacker.times, time.Now().Unix())
 
 	if attacker.blocked {
 		log.Println(attacker.addr, "should already have been blocked")
 	} else if attacker.score >= threshold {
 		attacker.attacks += 1
 		attacker.blocked = true
+		attacker.times = append(attacker.times, -1)
 		go block(attacker.addr, blocker, blockDuration(*attacker), c)
 	}
+}
+
+func dumpAttackers(attackers map[string]Attacker) {
+	const filename = "attacks.csv"
+	file, err := os.Create(filename)
+	if err != nil {
+		fmt.Println("could not dump attackers", err)
+		return
+	}
+	for _, attacker := range attackers {
+		fmt.Fprintln(file, attacker.addr, attacker.times)
+	}
+	log.Println("wrote attacks to", filename)
 }
 
 func watch(mon <-chan string, blocker fw.Blocker) {
@@ -75,7 +91,7 @@ func watch(mon <-chan string, blocker fw.Blocker) {
 	p := NewParser(Patterns)
 
 	exit := make(chan os.Signal, 1)
-	signal.Notify(exit, os.Interrupt, syscall.SIGHUP, syscall.SIGTERM)
+	signal.Notify(exit, os.Interrupt, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINFO)
 	unblock := make(chan string, 1)
 	for {
 		select {
@@ -92,7 +108,11 @@ func watch(mon <-chan string, blocker fw.Blocker) {
 			attacker.blocked = false
 			attacker.score = 0
 			attackers[addr] = attacker
-		case <-exit:
+		case sig := <-exit:
+			if sig == syscall.SIGINFO {
+				dumpAttackers(attackers)
+				break
+			}
 			log.Println("exiting on signal; flushing blocked addresses")
 			blocker.Flush()
 			return
