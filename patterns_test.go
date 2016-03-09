@@ -48,6 +48,7 @@ func TestDovecot(t *testing.T) {
 	t.Skip("Not implemented")
 	match := []string{
 		"imap-login: Aborted login (auth failed, 6 attempts): XYZ rip=6.6.6.0, lip=127.0.0.1",
+		"pop3-login: Aborted login (auth failed, 1 attempts in 7 secs): user=<XYZ>, method=PLAIN, rip=6.6.6.0, lip=1.2.3.4, session=<Y8jIxw/97AAFZZ1Q>",
 	}
 	nomatch := []string{}
 	checkMatches(t, match, nomatch)
