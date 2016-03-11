@@ -14,6 +14,7 @@ func TestPatterns(t *testing.T) {
 		"Did not receive identification string from 6.6.6.0",
 		"FTP LOGIN FAILED FROM 6.6.6.0, XYZ",
 		"Failed XYZ for XYZ from 6.6.6.0 port 14423 ssh2",
+		"Invalid user  from 6.6.6.0",
 		"Invalid user admin from 6.6.6.0",
 		"Invalid user inexu from 6.6.6.0",
 		"Login failed user=XYZ auth=XYZ host=XYZ [6.6.6.0]",

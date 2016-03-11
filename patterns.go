@@ -1,7 +1,7 @@
 package main
 
 // user matches any non-zero string suitable for usernames
-const user = `(?P<user>.+)`
+const user = `(?P<user>.*)`
 
 // ip4 matches the text part of IPv4 addresses (including 500.500.500.500)
 const ip4 = `(?P<ip4>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})`
