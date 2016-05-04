@@ -13,11 +13,12 @@ import (
 )
 
 type Attacker struct {
-	addr    string
-	blocked bool
-	score   int
-	attacks int
-	times   []int64
+	addr         string
+	attacks      int
+	score        int
+	firstOffense time.Time
+	lastOffense  time.Time
+	unblockTime  time.Time
 }
 
 var initialBlock time.Duration
@@ -36,7 +37,7 @@ func initSyslog() {
 }
 
 // blockDuration calculates how long to block an attacker for.
-func blockDuration(attacker Attacker) time.Duration {
+func (attacker Attacker) blockDuration() time.Duration {
 	duration := initialBlock
 	for i := 0; i < attacker.attacks-1; i++ {
 		duration *= 2
@@ -44,32 +45,26 @@ func blockDuration(attacker Attacker) time.Duration {
 	return duration
 }
 
-// block 'addr' and unblock after sleeping for the given duration. Send 'addr'
-// to the given channel after 'addr' is unblocked.
-func block(addr string, blocker fw.Blocker, d time.Duration, c chan string) {
-	if err := blocker.Block(addr); err != nil {
-		log.Println("failed to block", addr, ":", err)
-	} else {
-		log.Println("blocking", addr, "for", d)
-		time.Sleep(d)
-		blocker.Release(addr)
-	}
-	c <- addr
+func (a Attacker) blocked() bool {
+	return !a.unblockTime.IsZero()
 }
 
 // report is called for every log message that matches an attack pattern.
-func report(attacker *Attacker, blocker fw.Blocker, c chan string) {
-	score := 10
+func report(attacker *Attacker, blocker fw.Blocker) {
+	const score = 10
 	attacker.score += score
-	attacker.times = append(attacker.times, time.Now().Unix())
 
-	if attacker.blocked {
+	if attacker.blocked() {
 		log.Println(attacker.addr, "should already have been blocked")
 	} else if attacker.score >= threshold {
 		attacker.attacks += 1
-		attacker.blocked = true
-		attacker.times = append(attacker.times, -1)
-		go block(attacker.addr, blocker, blockDuration(*attacker), c)
+		duration := attacker.blockDuration()
+		attacker.unblockTime = time.Now().Add(duration)
+		if err := blocker.Block(addr); err != nil {
+			log.Println("failed to block", addr, ":", err)
+		} else {
+			log.Println("blocking", addr, "for", duration)
+		}
 	}
 }
 
@@ -81,10 +76,19 @@ func dumpAttackers(attackers map[string]Attacker) {
 		return
 	}
 	for _, attacker := range attackers {
-		fmt.Fprintln(file, attacker.addr, attacker.times)
+		fmt.Fprintln(file, attacker)
 	}
 	log.Println("wrote attacks to", filename)
 }
+
+/*
+func unblock() {
+	attacker := attackers[addr]
+	attacker.blocked = false
+	attacker.score = 0
+	attackers[addr] = attacker
+}
+*/
 
 func watch(mon <-chan string, blocker fw.Blocker) {
 	attackers := make(map[string]Attacker)
@@ -92,22 +96,18 @@ func watch(mon <-chan string, blocker fw.Blocker) {
 
 	exit := make(chan os.Signal, 1)
 	signal.Notify(exit, os.Interrupt, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINFO)
-	unblock := make(chan string, 1)
 	for {
 		select {
 		case input := <-mon:
 			if result := p.Parse(input); result != nil {
 				addr := Addr(result)
-				attacker := attackers[addr]
-				attacker.addr = addr
-				report(&attacker, blocker, unblock)
+				attacker, ok := attackers[addr]
+				if !ok {
+					attacker.addr = addr
+				}
+				report(&attacker, blocker)
 				attackers[addr] = attacker
 			}
-		case addr := <-unblock:
-			attacker := attackers[addr]
-			attacker.blocked = false
-			attacker.score = 0
-			attackers[addr] = attacker
 		case sig := <-exit:
 			if sig == syscall.SIGINFO {
 				dumpAttackers(attackers)
