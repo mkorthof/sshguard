@@ -7,7 +7,8 @@ import (
 	"os/exec"
 )
 
-func MonitorReader(rd io.Reader) <-chan string {
+// Monitor wraps a channel around a Reader, unblocking every non-empty line.
+func Monitor(rd io.Reader) <-chan string {
 	scanner := bufio.NewScanner(rd)
 	c := make(chan string)
 	go func() {
@@ -21,6 +22,7 @@ func MonitorReader(rd io.Reader) <-chan string {
 	return c
 }
 
+// MonitorFiles invokes 'tail' to wrap a channel around multiple files.
 func MonitorFiles(files ...string) <-chan string {
 	args := append([]string{"-n", "0", "-F"}, files...)
 	cmd := exec.Command("tail", args...)
@@ -39,5 +41,5 @@ func MonitorFiles(files ...string) <-chan string {
 			log.Fatal("could not invoke fallback tail:", err)
 		}
 	}
-	return MonitorReader(stdout)
+	return Monitor(stdout)
 }

@@ -129,7 +129,7 @@ func parseCmdline() (c <-chan string, b fw.Blocker) {
 
 	b = initBackend(*backend)
 	if flag.NArg() < 1 {
-		c = MonitorReader(os.Stdin)
+		c = Monitor(os.Stdin)
 	} else {
 		c = MonitorFiles(flag.Args()...)
 	}
