@@ -2,6 +2,7 @@ package main
 
 import (
 	"bitbucket.org/sshguard/sshguard/fw"
+	sshguard "bitbucket.org/sshguard/sshguard/lib"
 	"flag"
 	"fmt"
 	"log"
@@ -11,15 +12,6 @@ import (
 	"syscall"
 	"time"
 )
-
-type Attacker struct {
-	addr         string
-	attacks      int
-	score        int
-	firstOffense time.Time
-	lastOffense  time.Time
-	unblockTime  time.Time
-}
 
 var initialBlock time.Duration
 var threshold int
@@ -36,19 +28,6 @@ func initSyslog() {
 	log.SetOutput(logger)
 }
 
-// blockDuration calculates how long to block an attacker for.
-func (attacker Attacker) blockDuration() time.Duration {
-	duration := initialBlock
-	for i := 0; i < attacker.attacks-1; i++ {
-		duration *= 2
-	}
-	return duration
-}
-
-func (a Attacker) blocked() bool {
-	return !a.unblockTime.IsZero()
-}
-
 // report is called for every log message that matches an attack pattern.
 func report(attacker *Attacker, blocker fw.Blocker) {
 	const score = 10
@@ -60,25 +39,12 @@ func report(attacker *Attacker, blocker fw.Blocker) {
 		attacker.attacks += 1
 		duration := attacker.blockDuration()
 		attacker.unblockTime = time.Now().Add(duration)
-		if err := blocker.Block(addr); err != nil {
-			log.Println("failed to block", addr, ":", err)
+		if err := blocker.Block(attacker.addr); err != nil {
+			log.Println("failed to block", attacker.addr, ":", err)
 		} else {
-			log.Println("blocking", addr, "for", duration)
+			log.Println("blocking", attacker.addr, "for", duration)
 		}
 	}
-}
-
-func dumpAttackers(attackers map[string]Attacker) {
-	const filename = "attacks.csv"
-	file, err := os.Create(filename)
-	if err != nil {
-		fmt.Println("could not dump attackers", err)
-		return
-	}
-	for _, attacker := range attackers {
-		fmt.Fprintln(file, attacker)
-	}
-	log.Println("wrote attacks to", filename)
 }
 
 /*
@@ -92,7 +58,7 @@ func unblock() {
 
 func watch(mon <-chan string, blocker fw.Blocker) {
 	attackers := make(map[string]Attacker)
-	p := NewParser(Patterns)
+	p := sshguard.NewParser(sshguard.Patterns)
 
 	exit := make(chan os.Signal, 1)
 	signal.Notify(exit, os.Interrupt, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINFO)
@@ -100,7 +66,7 @@ func watch(mon <-chan string, blocker fw.Blocker) {
 		select {
 		case input := <-mon:
 			if result := p.Parse(input); result != nil {
-				addr := Addr(result)
+				addr := sshguard.Addr(result)
 				attacker, ok := attackers[addr]
 				if !ok {
 					attacker.addr = addr

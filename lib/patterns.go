@@ -1,4 +1,4 @@
-package main
+package sshguard
 
 // user matches any non-zero string suitable for usernames
 const user = `(?P<user>.*)`
