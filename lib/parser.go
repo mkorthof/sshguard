@@ -9,14 +9,16 @@ type Parser struct {
 	res []*regexp.Regexp
 }
 
-func extract(re *regexp.Regexp, s string) map[string]string {
+type AttackInfo map[string]string
+
+func extract(re *regexp.Regexp, s string) AttackInfo {
 	matches := re.FindStringSubmatch(s)
 	if matches == nil {
 		return nil
 	}
 
 	names := re.SubexpNames()
-	results := make(map[string]string)
+	results := make(AttackInfo)
 	for i, name := range names {
 		if i != 0 && name != "" {
 			results[name] = matches[i]
@@ -36,7 +38,7 @@ func NewParser(patterns []string) *Parser {
 }
 
 // Parse extracts details of an attack or returns nil if no match.
-func (p *Parser) Parse(s string) map[string]string {
+func (p *Parser) Parse(s string) AttackInfo {
 	for _, re := range p.res {
 		if result := extract(re, s); result != nil {
 			return result
@@ -46,7 +48,7 @@ func (p *Parser) Parse(s string) map[string]string {
 }
 
 // Addr returns the value of the address fields of a string-string map.
-func Addr(values map[string]string) string {
+func (values AttackInfo) Addr() string {
 	if ip6, ok := values["ip6"]; ok {
 		return ip6
 	}

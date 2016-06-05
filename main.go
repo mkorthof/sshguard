@@ -66,7 +66,7 @@ func watch(mon <-chan string, blocker fw.Blocker) {
 		select {
 		case input := <-mon:
 			if result := p.Parse(input); result != nil {
-				addr := sshguard.Addr(result)
+				addr := result.Addr()
 				attacker, ok := attackers[addr]
 				if !ok {
 					attacker.addr = addr
