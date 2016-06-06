@@ -96,6 +96,8 @@ func initBackend(name string) (b fw.Blocker) {
 	switch name {
 	case "ipfw":
 		b = fw.NewIpfwBlocker()
+	case "null":
+		b = fw.NewNullBlocker()
 	case "pf":
 		b = fw.NewPfBlocker()
 	default:
