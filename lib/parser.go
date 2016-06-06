@@ -13,14 +13,16 @@ const ip4 = `(?P<ip4>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})`
 // addr textually matches either IPv4 or IPv6 addresses
 const addr = ip4
 
-func extract(re *regexp.Regexp, s string) AttackInfo {
+// extract returns a map from the names of parenthesized sub-expressions to
+// their values.
+func extract(re *regexp.Regexp, s string) map[string]string {
 	matches := re.FindStringSubmatch(s)
 	if matches == nil {
 		return nil
 	}
 
 	names := re.SubexpNames()
-	results := make(AttackInfo)
+	results := make(map[string]string)
 	for i, name := range names {
 		if i != 0 && name != "" {
 			results[name] = matches[i]
@@ -29,61 +31,62 @@ func extract(re *regexp.Regexp, s string) AttackInfo {
 	return results
 }
 
-// service is a convenience type used for writing service filters.
-type service struct {
+// rules is a convenience type for writing rules for services.
+type rules struct {
 	name    string
 	attacks []string // (e.g. login failures)
 	spam    []string // (e.g. preauth disconnection)
 	success []string // (e.g. login success)
 }
 
-// MakeFilter creates a serviceFilter from a service and exits on error.
-func (s service) MakeFilter() (sf serviceFilter) {
-	sf = serviceFilter{}
-	sf.name = s.name
-	sf.score = []int{}
-	sf.re = []*regexp.Regexp{}
+// service transforms rules into a service ruleset for the parser.
+func (r rules) service() (sv service) {
+	sv = service{r.name, []int{}, []*regexp.Regexp{}}
 	addAll := func(patterns []string, score int) {
 		for _, p := range patterns {
-			sf.score = append(sf.score, score)
-			sf.re = append(sf.re, regexp.MustCompile(p))
+			sv.score = append(sv.score, score)
+			sv.re = append(sv.re, regexp.MustCompile(p))
 		}
 	}
-	addAll(s.attacks, 3)
-	addAll(s.spam, 1)
-	addAll(s.success, 0)
-	return sf
+	addAll(r.attacks, 3)
+	addAll(r.spam, 1)
+	addAll(r.success, 0)
+	return sv
 }
 
-// Group of attacks on a particular service
-type serviceFilter struct {
+// service is a ruleset for a particular service used by the parser.
+type service struct {
 	name  string
 	score []int
 	re    []*regexp.Regexp
 }
 
-// Parse extracts details of an attack or returns nil if no match.
-func (sf serviceFilter) Parse(s string) AttackInfo {
-	for _, re := range sf.re {
+// Parse returns details of an attack or false if there's no match.
+func (sv service) Parse(s string) (AttackInfo, bool) {
+	for i, re := range sv.re {
 		if result := extract(re, s); result != nil {
-			result["service"] = sf.name
-			return result
+			return AttackInfo{sv.score[i],
+				result["ip4"], result["ip6"], result["user"]}, true
 		}
 	}
-	return nil
+	return AttackInfo{}, false
 }
 
-type AttackInfo map[string]string
+type AttackInfo struct {
+	score    int
+	ip4, ip6 string
+	user     string
+}
 
-// Addr returns the value of the address fields of a string-string map.
-func (values AttackInfo) Addr() string {
-	if ip6, ok := values["ip6"]; ok {
-		return ip6
+// Addr returns a string with either the IPv6 or IPv4 address of an attack.
+func (info AttackInfo) Addr() string {
+	if info.ip6 != "" {
+		return info.ip6
 	}
-	return values["ip4"]
+	return info.ip4
 }
 
-var FilterSSH = service{"sshd",
+var FilterSSH = rules{"sshd",
 	[]string{
 		// OpenSSH
 		"[Ii]nvalid user " + user + " from " + addr,
@@ -97,4 +100,4 @@ var FilterSSH = service{"sshd",
 		"Did not receive identification string from " + addr,
 		"(error: )?((Connection (closed|reset) by)|(Received disconnect from)) " + addr + "[: ].*\\[preauth\\]",
 		"Bad protocol version identification .* from " + addr,
-	}, nil}.MakeFilter()
+	}, nil}.service()
