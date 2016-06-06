@@ -1,6 +1,7 @@
 package sshguard
 
 import (
+	"fmt"
 	"regexp"
 )
 
@@ -11,6 +12,7 @@ const user = `(?P<user>.*)`
 const ip4 = `(?P<ip4>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})`
 
 // addr textually matches either IPv4 or IPv6 addresses
+// TODO: Add support for IPv6
 const addr = ip4
 
 // extract returns a map from the names of parenthesized sub-expressions to
@@ -65,7 +67,7 @@ type service struct {
 func (sv service) Parse(s string) (AttackInfo, bool) {
 	for i, re := range sv.re {
 		if result := extract(re, s); result != nil {
-			return AttackInfo{sv.score[i],
+			return AttackInfo{sv.score[i], sv.name,
 				result["ip4"], result["ip6"], result["user"]}, true
 		}
 	}
@@ -73,7 +75,8 @@ func (sv service) Parse(s string) (AttackInfo, bool) {
 }
 
 type AttackInfo struct {
-	score    int
+	Score    int
+	service  string
 	ip4, ip6 string
 	user     string
 }
@@ -84,6 +87,10 @@ func (info AttackInfo) Addr() string {
 		return info.ip6
 	}
 	return info.ip4
+}
+
+func (info AttackInfo) String() string {
+	return fmt.Sprintf("(%d, %s, %s, %s)", info.Score, info.service, info.Addr(), info.user)
 }
 
 var FilterSSH = rules{"sshd",

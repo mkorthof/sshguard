@@ -56,43 +56,47 @@ func unblock() {
 }
 */
 
-func watch(mon <-chan string, blocker fw.Blocker) {
+func watch(monitor <-chan string, blocker fw.Blocker, verbose bool) {
 	attackers := make(map[string]Attacker)
-	//p := sshguard.NewParser(sshguard.Patterns)
-
-	exit := make(chan os.Signal, 1)
-	signal.Notify(exit, os.Interrupt, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINFO)
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc, os.Interrupt, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINFO)
+	defer func() {
+		log.Println("exiting on signal; flushing blocked addresses")
+		blocker.Flush()
+	}()
 	for {
 		select {
-		case input := <-mon:
+		case input := <-monitor:
 			if info, ok := sshguard.FilterSSH.Parse(input); ok {
-				fmt.Println(info)
 				addr := info.Addr()
-				attacker, ok := attackers[addr]
-				if !ok {
+				if info.Score > 0 {
+					// TODO: Cleanup here
+					attacker := attackers[addr]
 					attacker.addr = addr
+					report(&attacker, blocker)
+					attackers[addr] = attacker
+				} else {
+					// TODO: Delete from attackers table
+					if verbose {
+						log.Println("success for", addr)
+					}
 				}
-				report(&attacker, blocker)
-				attackers[addr] = attacker
 			}
-		case sig := <-exit:
+		case sig := <-sc:
 			if sig == syscall.SIGINFO {
 				dumpAttackers(attackers)
-				break
+			} else {
+				return
 			}
-			log.Println("exiting on signal; flushing blocked addresses")
-			blocker.Flush()
-			return
 		}
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: sshguard [flags] [file ...]")
+	fmt.Fprintln(os.Stderr, "usage: sshguard -f <backend> [flags] [file ...]")
 	flag.PrintDefaults()
 }
 
-// initBackend initializes a backend or exits on failure.
 func initBackend(name string) (b fw.Blocker) {
 	switch name {
 	case "ipfw":
@@ -113,15 +117,15 @@ func initBackend(name string) (b fw.Blocker) {
 	return b
 }
 
-func parseCmdline() (c <-chan string, b fw.Blocker) {
-	flag.IntVar(&threshold, "a", 30,
-		"Block an address when its dangerousness exceeds `score`.")
-	noDaemon := flag.Bool("d", false,
-		"Do not daemonize. Run in the foreground and log to stderr.")
-	backend := flag.String("f", "none", "Firewall or `backend` to use.")
+func parseCmdline() (c <-chan string, b fw.Blocker, vb bool) {
+	flag.IntVar(&threshold, "a", 30, "Block when score exceeds `thresh`")
 	flag.DurationVar(&initialBlock, "p", time.Minute*2,
-		"Block attackers for the given initial `duration`.")
-	version := flag.Bool("v", false, "Print version information and exit.")
+		"Block first-time offenders for `duration`")
+
+	backend := flag.String("backend", "", "Block offenders using `backend`")
+	noDaemon := flag.Bool("n", false, "Log to stderr instead of syslog")
+	verbose := flag.Bool("verbose", false, "Print verbose log output")
+	version := flag.Bool("version", false, "Show version")
 	flag.Usage = usage
 	flag.Parse()
 
@@ -140,15 +144,15 @@ func parseCmdline() (c <-chan string, b fw.Blocker) {
 	if !*noDaemon {
 		initSyslog()
 	}
-	return c, b
+	return c, b, *verbose
 }
 
 func main() {
-	input, blocker := parseCmdline()
+	input, blocker, verbose := parseCmdline()
 	if flag.NArg() < 1 {
 		log.Println("monitoring stdin")
 	} else {
 		log.Println("monitoring", flag.Args())
 	}
-	watch(input, blocker)
+	watch(input, blocker, verbose)
 }
