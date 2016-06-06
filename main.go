@@ -58,14 +58,14 @@ func unblock() {
 
 func watch(mon <-chan string, blocker fw.Blocker) {
 	attackers := make(map[string]Attacker)
-	p := sshguard.NewParser(sshguard.Patterns)
+	//p := sshguard.NewParser(sshguard.Patterns)
 
 	exit := make(chan os.Signal, 1)
 	signal.Notify(exit, os.Interrupt, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINFO)
 	for {
 		select {
 		case input := <-mon:
-			if result := p.Parse(input); result != nil {
+			if result := sshguard.FilterSSH.Parse(input); result != nil {
 				addr := result.Addr()
 				attacker, ok := attackers[addr]
 				if !ok {
