@@ -122,7 +122,7 @@ func parseCmdline() (c <-chan string, b fw.Blocker, vb bool) {
 	flag.DurationVar(&initialBlock, "p", time.Minute*2,
 		"Block first-time offenders for `duration`")
 
-	backend := flag.String("backend", "", "Block offenders using `backend`")
+	backend := flag.String("f", "", "Block offenders using `backend`")
 	noDaemon := flag.Bool("n", false, "Log to stderr instead of syslog")
 	verbose := flag.Bool("verbose", false, "Print verbose log output")
 	version := flag.Bool("version", false, "Show version")
