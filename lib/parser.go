@@ -50,8 +50,8 @@ func (r rules) service() (sv service) {
 			sv.re = append(sv.re, regexp.MustCompile(p))
 		}
 	}
-	addAll(r.attacks, 3)
-	addAll(r.spam, 1)
+	addAll(r.attacks, 10)
+	addAll(r.spam, 6)
 	addAll(r.success, 0)
 	return sv
 }
@@ -90,7 +90,7 @@ func (info AttackInfo) Addr() string {
 }
 
 func (info AttackInfo) String() string {
-	return fmt.Sprintf("(%d, %s, %s, %s)", info.Score, info.service, info.Addr(), info.user)
+	return fmt.Sprintf("{%d, %s, %s, %s}", info.Score, info.service, info.Addr(), info.user)
 }
 
 var FilterSSH = rules{"sshd",
@@ -107,4 +107,6 @@ var FilterSSH = rules{"sshd",
 		"Did not receive identification string from " + addr,
 		"(error: )?((Connection (closed|reset) by)|(Received disconnect from)) " + addr + "[: ].*\\[preauth\\]",
 		"Bad protocol version identification .* from " + addr,
-	}, nil}.service()
+	}, []string{
+		"Accepted publickey for " + user + " from " + addr + " port .*",
+	}}.service()

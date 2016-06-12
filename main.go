@@ -30,13 +30,10 @@ func initSyslog() {
 
 // report is called for every log message that matches an attack pattern.
 func report(attacker *Attacker, blocker fw.Blocker) {
-	const score = 10
-	attacker.score += score
-
 	if attacker.blocked() {
 		log.Println(attacker.addr, "should already have been blocked")
 	} else if attacker.score >= threshold {
-		attacker.attacks += 1
+		attacker.offenses += 1
 		duration := attacker.blockDuration()
 		attacker.unblockTime = time.Now().Add(duration)
 		if err := blocker.Block(attacker.addr); err != nil {
@@ -57,31 +54,42 @@ func unblock() {
 */
 
 func watch(monitor <-chan string, blocker fw.Blocker, verbose bool) {
-	attackers := make(map[string]Attacker)
+	attackers := make(map[string]*Attacker)
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, os.Interrupt, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINFO)
 	defer func() {
 		log.Println("exiting on signal; flushing blocked addresses")
 		blocker.Flush()
 	}()
+	forget := func(addr string) {
+		// TODO: Unblock if blocked already
+		delete(attackers, addr)
+	}
 	for {
 		select {
 		case input := <-monitor:
 			if info, ok := sshguard.FilterSSH.Parse(input); ok {
 				addr := info.Addr()
 				if info.Score > 0 {
-					// TODO: Cleanup here
+					log.Println("attack from", info)
 					attacker := attackers[addr]
+					if attacker == nil {
+						attacker = &Attacker{}
+						attackers[addr] = attacker
+					}
+					// TODO: Move to report with AttackInfo
 					attacker.addr = addr
-					report(&attacker, blocker)
-					attackers[addr] = attacker
+					attacker.score += info.Score
+					report(attacker, blocker)
+					// TODO: Recalculate next attacker to unblock.
 				} else {
-					// TODO: Delete from attackers table
 					if verbose {
 						log.Println("success for", addr)
 					}
+					forget(addr)
 				}
 			}
+		// TODO: Timeout channel for unblocking offenders.
 		case sig := <-sc:
 			if sig == syscall.SIGINFO {
 				dumpAttackers(attackers)
