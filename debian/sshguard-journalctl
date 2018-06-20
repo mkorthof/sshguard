@@ -1,0 +1,7 @@
+#!/bin/sh
+
+if [ "$ENABLE_FIREWALL" = "1" ]; then
+	/bin/journalctl -afb -p info -n1 -o cat SYSLOG_FACILITY=4 SYSLOG_FACILITY=10 | /usr/sbin/sshguard "$@"
+else
+	echo "sshguard is not enabled, please check /etc/default/sshguard"
+fi

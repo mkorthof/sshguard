@@ -41,3 +41,11 @@ sshguard-*.tar.gz
 tap-driver.sh
 test-driver
 ylwrap
+debian/sshguard
+debian/*.debhelper
+autoreconf.after
+autoreconf.before
+debian/debhelper-build-stamp
+debian/patches
+debian/files
+debian/sshguard.substvars

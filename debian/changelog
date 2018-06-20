@@ -1,0 +1,236 @@
+sshguard (2.1.0) unstable; urgency=medium
+
+  * New upstream release.
+  * debian/patches/02_avoid_ftbfs_kfreebsd.diff: Remove,
+    does not appear to be applicable.
+  * debian/rules: remove dropped configure flags.
+  * Offer to upstream.
+
+ -- timeless <timeless@gmail.com>  Mon, 18 Jun 2018 12:00:00 -0000
+
+sshguard (1.7.1-1) unstable; urgency=medium
+
+  * New upstream release. (LP: #1617549)
+  * debian/rules: Update upstream changelog name.
+    + Remove autoreconf in dh sequence, not needed by
+      compat level 10.
+  * debian/copyright: Update copyright information.
+  * debian/control: Bump debhelper version to 10.
+    + Apply wrap-and-sort command.
+    + Add Depends on lsb-base (>= 3.0-6).
+    + Remove dh-autoreconf from B-D.
+  * debian/compat: Switch compat level 9 to 10.
+  * debian/patches/01-update-manpage-settings.diff: Remove,
+    merged with upstream.
+  * debian/source/lintian-overrides, Remove, it is not necessary
+    now.
+
+ -- Julián Moreno Patiño <julian@debian.org>  Mon, 19 Dec 2016 15:09:29 -0500
+
+sshguard (1.6.4-2) unstable; urgency=medium
+
+  * d/firewall, Fix typo. (Closes: #823378)
+    + Thanks to T.A. van Roermund for it.
+  * d/patches/01-update-manpage-settings.diff, Update
+    man page with current default settings.
+
+ -- Julián Moreno Patiño <julian@debian.org>  Wed, 18 May 2016 10:11:45 -0500
+
+sshguard (1.6.4-1) unstable; urgency=medium
+
+  * New upstream release. (Closes: #807950)
+  * d/sshguard.service, Add -i parameter to manage pid.
+  * d/patches, Remove patches merge with upstream.
+    + d/patches/01-fix-ftbfs-libc6-v2.22.diff.
+    + d/patches/03-resurrect-PID.diff
+    + d/patches/04-adjust-default-abuse-threshold.diff
+    + d/patches/05-match-connection-reset-message-for-SSH.diff
+    + d/patches/06-update-dovecot-signature-for-POP3.diff
+    + d/patches/07-fix-size-argument-in-inet_ntop-call.diff
+    + d/patches/08-fix-bashim.diff
+
+ -- Julián Moreno Patiño <julian@debian.org>  Fri, 29 Apr 2016 11:26:33 -0500
+
+sshguard (1.6.3-2) unstable; urgency=medium
+
+  * d/sshguard-journalctl, Remove the -l- parameter to avoid
+    useless log entries. (Closes: #822108)
+
+ -- Julián Moreno Patiño <julian@debian.org>  Thu, 21 Apr 2016 13:38:54 -0500
+
+sshguard (1.6.3-1) unstable; urgency=medium
+
+  * New upstream release.
+  * d/sshguard.service, Add missing Documentation key.
+    + Remove -i option. Upstream removes it.
+  * d/sshguard.init, Take back some changes to the previous
+     init script version.
+  * d/sshguard-journalctl, By default enable monitoring in all
+     systemd units. (Closes: #780800)
+     + Thanks to Eugene San for it.
+  * Refresh 02_avoid_ftbfs_kfreebsd.diff patch offset.
+  * Import upstream fixes:
+    + d/patches/01-fix-ftbfs-libc6-v2.22.diff. (Closes: #812045)
+    + d/patches/03-resurrect-PID.diff
+    + d/patches/04-adjust-default-abuse-threshold.diff
+    + d/patches/05-match-connection-reset-message-for-SSH.diff
+    + d/patches/06-update-dovecot-signature-for-POP3.diff
+    + d/patches/07-fix-size-argument-in-inet_ntop-call.diff
+    + d/patches/08-fix-bashim.diff
+  * Rewrite d/rules file.
+    + Improve hardening flags support.
+  * d/sshguard.install, Add common installation files.
+  * d/control, Add B-D on flex.
+    + Use HTTPS transport protocol for Vcs-Git URI.
+    + Bump Standards-Version to 3.9.8 (no changes).
+  * d/firewall, Skip inserting sshguard chain if already
+     has that entry. Thanks to Alexander Afonyashin for it.
+     + Support systemd ENABLE_FIREWALL configuration. (Closes: #792325)
+       + Thanks to Victor Bourachot for it.
+  * d/copyright, Update copyright holders.
+
+ -- Julián Moreno Patiño <julian@debian.org>  Mon, 18 Apr 2016 09:15:32 -0500
+
+sshguard (1.6.0-1) unstable; urgency=medium
+
+  * New upstream release. (Closes: #693614)
+  * d/patches/01_sshguard_manpage.diff, Remove, merge with upstream.
+  * d/patches/02_avoid_ftbfs_kfreebsd.diff, Refresh patch offset.
+  * d/patches/03_fix_inode.diff, Remove, merge with upstream.
+  * d/control, Bump Standards-Version to 3.9.6 (no changes).
+  * Add systemd support. (Closes: #780800)
+    + Thanks to Ondřej Surý for it.
+  * Add -w parameter to iptables to wait for the xtables
+    lock. (Closes: #775209 #780238)
+    + Thanks to Joao Luis Meloni Assirati for it.
+  * d/copyright, Extend debian copyright holders years.
+    + Update short license name.
+
+ -- Julián Moreno Patiño <julian@debian.org>  Wed, 13 May 2015 10:51:59 -0500
+
+sshguard (1.5-6) unstable; urgency=medium
+
+  * Add IPv6 localhost to whitelist file. (Closes: #753396)
+  * DM-Upload-Allowed, not needed.
+  * Update my email.
+  * Bump Standards-Version to 3.9.5 (no changes).
+  * Bump debhelper version to 9.
+  * Use canonical URIs for Vcs-* fields.
+  * Add patch to fix break if inode is too big. (Closes: #642097)
+    + Thanks to Johann Hartwig Hauschild for it.
+  * Update debian/copyright for machine-readable format, version 1.0.
+    + Extend debian copyright holder years.
+  * Remove debian/source/options because the default now is xz.
+
+ -- Julián Moreno Patiño <julian@debian.org>  Tue, 01 Jul 2014 10:02:01 -0500
+
+sshguard (1.5-5) unstable; urgency=low
+
+  * Switch compat level 8 to 9 to use hardening flags.
+  * Add lintian override to fix 
+    package-needs-versioned-debhelper-build-depends 
+    warning for experimental debhelper version.
+
+  [Ludovico Cavedon]
+  * Add DM-Upload-Allowed.
+
+ -- Julián Moreno Patiño <darkjunix@gmail.com>  Sat, 31 Dec 2011 12:41:19 -0500
+
+sshguard (1.5-4) unstable; urgency=low
+
+  * Change default parameter -a 4 to -a 40 
+    in sshguard.default. (Closes: #638225)
+  * Update copyright file to DEP5 rev 174
+
+ -- Julián Moreno Patiño <darkjunix@gmail.com>  Mon, 19 Sep 2011 00:26:06 -0500
+
+sshguard (1.5-3) unstable; urgency=low
+
+  * Avoid to run incorrectly the for-loop in init script
+    + Thanks for the patch to Alexander Noack
+  * Bump Standards-Version to 3.9.2 (no changes).
+  * Set debhelper v8 in B-D
+  * Switch compat level 7 to 8
+  * Change dh-autoreconf order to avoid build error
+
+ -- Julián Moreno Patiño <darkjunix@gmail.com>  Tue, 19 Jul 2011 20:50:13 -0500
+
+sshguard (1.5-2) unstable; urgency=low
+
+  * Modified init.d script to fix piuparts
+    unistallation error.
+
+ -- Julián Moreno Patiño <darkjunix@gmail.com>  Thu, 17 Feb 2011 19:59:38 -0500
+
+sshguard (1.5-1) unstable; urgency=low
+
+  * New upstream release
+    + Removed README.source, it's not used.
+    + Moved svn to git
+    + Added support for whitelisting
+    + Released to unstable, it's a stable release.
+
+ -- Julián Moreno Patiño <darkjunix@gmail.com>  Sun, 13 Feb 2011 17:24:58 -0500
+
+sshguard (1.5~rc4-1) experimental; urgency=low
+
+  * New upstream release.
+    + Used debhelper 7.0.50~ overrides
+    + Added debhelper 7.0.50~ to B-D
+    + Added support debsrc3
+    + Added patch to avoid FTBFS in KfreeBSD
+    + Used quilt 3.0 format
+    + Removed dpatch in B-D
+    + Changed autotools-dev to dh-autoreconf in B-D
+    + Adopted DEP5 Format
+    + Updated debian/watch. Thanks to Ludovico Cavedon
+  * Bump Standards-Version to 3.9.1 (no changes).
+  * Init Script. Closes: #595915
+    + Thanks to Eugene San
+
+ -- Julián Moreno Patiño <darkjunix@gmail.com>  Wed, 29 Dec 2010 15:46:46 -0500
+
+sshguard (1.4-2) unstable; urgency=low
+
+  * Initial support kfreebsd.
+  * debian/control: B-D iptables [!kfreebsd-i386 !kfreebsd-amd64]
+  * debian/rules: supported Packet Filter.
+
+ -- Julián Moreno Patiño <darkjunix@gmail.com>  Sun, 22 Nov 2009 02:18:32 -0500
+
+sshguard (1.4-1) unstable; urgency=low
+
+  * New upstream release.
+  * debian/control: Changed Maintainer field and add dpatch to B-D.
+  * debian/copyright: Update copyright holders.
+  * debian/watch: Added.
+  * debian/patches: Added patch to fix manpage errors.
+  * debian/rules: Add dpatch, remove unnecessary dh calls and clean
+    commad.h file.
+  * Move iptables from B-D to Depends.
+  * Updated standards version(no changes needed).
+  * New maintainer. Closes: #552749
+
+ -- Julián Moreno Patiño <darkjunix@gmail.com>  Thu, 05 Nov 2009 15:06:42 -0500
+
+sshguard (1.3-1) unstable; urgency=low
+
+  * New upstream release (Closes: #509029).
+  * Fix skip any other iptables rules (Closes: #495683). 
+  * Fix lintian report. copyright-without-copyright-notice.  
+
+ -- Ernesto Nadir Crespo Avila <ecrespo@debianvenezuela.org>  Mon, 19 Jan 2009 00:56:46 -0430
+
+sshguard (1.0-2) unstable; urgency=low
+
+  * Fix package short description is missing (Closes: #446534).
+  * Change email maintainner to ecrespo@debianvenezuela.org.
+
+ -- Ernesto Nadir Crespo Avila <ecrespo@debianvenezuela.org>  Mon, 03 Dec 2007 15:16:10 -0400
+
+sshguard (1.0-1) unstable; urgency=low
+
+  * Initial release (Closes: #428214)  
+
+ -- Ernesto Nadir Crespo Avila <ecrespo@debian.org.ve>  Sat, 09 Jun 2007 15:28:55 -0400
+

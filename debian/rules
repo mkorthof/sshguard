@@ -1,0 +1,25 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+#export DH_VERBOSE=1
+
+OS := $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
+export DEB_BUILD_MAINT_OPTIONS=hardening=+all
+
+%:
+	dh $@ --with systemd
+
+
+override_dh_install:
+	dh_install
+ifeq ($(OS), kfreebsd)
+	install -m 644 debian/sshguard.conf $(CURDIR)/debian/sshguard/etc/sshguard/
+else
+	install -m 755 debian/sshguard-journalctl $(CURDIR)/debian/sshguard/usr/lib/sshguard/
+endif
+
+override_dh_installchangelogs:
+	dh_installchangelogs CHANGELOG.rst
+
+override_dh_fixperms:
+	dh_fixperms
+	chmod 0755 $(CURDIR)/debian/sshguard/usr/lib/sshguard/firewall

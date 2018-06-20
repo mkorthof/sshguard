@@ -1,0 +1,2 @@
+debian/firewall /usr/lib/sshguard/
+debian/whitelist /etc/sshguard/

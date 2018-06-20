@@ -1,0 +1,20 @@
+Source: sshguard
+Section: net
+Priority: optional
+Maintainer: Julián Moreno Patiño <julian@debian.org>
+Build-Depends: debhelper (>= 10), dh-systemd (>= 1.5), flex, bison, python-docutils | python3-docutils
+Standards-Version: 3.9.8
+Vcs-Git: https://anonscm.debian.org/git/collab-maint/sshguard.git
+Vcs-Browser: https://anonscm.debian.org/cgit/collab-maint/sshguard.git
+Homepage: http://sshguard.sourceforge.net
+
+Package: sshguard
+Architecture: any
+Depends: iptables [!kfreebsd-any],
+ lsb-base (>= 3.0-6),
+ ${misc:Depends},
+ ${shlibs:Depends}
+Description: Protects from brute force attacks against ssh
+ Protects networked hosts from the today's widespread
+ brute force attacks against ssh servers. It detects such attacks
+ and blocks the author's address with a firewall rule.
