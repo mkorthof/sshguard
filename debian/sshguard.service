@@ -1,7 +1,7 @@
 [Unit]
 Description=SSHGuard
 Documentation=man:sshguard(8)
-After=network.service
+After=network.target
 Before=sshd.service
 
 [Service]
