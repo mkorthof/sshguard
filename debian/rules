@@ -14,6 +14,9 @@ override_dh_install:
 ifeq ($(OS), kfreebsd)
 	install -m 644 debian/sshguard.conf $(CURDIR)/debian/sshguard/etc/sshguard/
 else
+	install -m 644 examples/sshguard.conf.sample $(CURDIR)/debian/sshguard/etc/sshguard.conf
+	sed -i -e 's!#BACKEND=.*!BACKEND="/'`cd $(CURDIR)/debian/sshguard; ls usr/lib/*/sshg-fw-iptables`'"!' \
+		$(CURDIR)/debian/sshguard/etc/sshguard.conf
 	install -m 755 debian/sshguard-journalctl $(CURDIR)/debian/sshguard/usr/lib/sshguard/
 endif
 
