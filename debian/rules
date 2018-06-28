@@ -22,7 +22,3 @@ endif
 
 override_dh_installchangelogs:
 	dh_installchangelogs CHANGELOG.rst
-
-override_dh_fixperms:
-	dh_fixperms
-	chmod 0755 $(CURDIR)/debian/sshguard/usr/lib/sshguard/firewall
