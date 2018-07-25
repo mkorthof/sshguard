@@ -19,6 +19,9 @@ AM_PROG_AR
 AM_PROG_LEX
 
 AS_BOX([Headers, Types, and Compiler Checks])
+PKG_CHECK_MODULES([SQLITE3], [sqlite3])
+AC_SUBST([SQLITE3_CFLAGS])
+AC_SUBST([SQLITE3_LIBS])
 AC_CHECK_HEADERS([getopt.h])
 
 AC_CHECK_HEADERS([sys/capsicum.h sys/capability.h], capsicum_found=candidate)
