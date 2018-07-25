@@ -1,0 +1,5 @@
+#!/bin/sh
+for name in `ls *.sql`; do ./sql2h "$name" > "$name.h"; done
+cat *.h > ../queries.h
+echo "extern sqlite3* db;" >> ../queries.h
+ls *.sql | sed -e 's/\.sql//' | python mkcalls.py >> ../queries.h

@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <sqlite3.h>
+#include "queries.h"
+
 #include "blocklist.h"
 #include "simclist.h"
 #include "sshguard_blacklist.h"
@@ -45,7 +48,21 @@ void fw_release(const char address[static 1], int kind) {
  */
 void unblock_expired(bool release) {
     attacker_t *tmpel;
+
     int ret;
+    sqlite3_reset(stmt_get_score_since_last_block);
+    do {
+        ret = sqlite3_step(stmt_get_releases);
+        if (ret == SQLITE_DONE) break;
+        int id = sqlite3_column_int(stmt_get_releases, 0);
+        const unsigned char* address = sqlite3_column_text(stmt_get_releases, 1);
+        int type = sqlite3_column_int(stmt_get_releases, 2);
+        printf("release id %d, %s, %d\n", id, address, type);
+        sqlite3_reset(stmt_release);
+        sqlite3_bind_int(stmt_release, 1, id);
+        sqlite3_step(stmt_release);
+    } while (ret == SQLITE_ROW);
+
     time_t now = time(NULL);
 
     pthread_testcancel();

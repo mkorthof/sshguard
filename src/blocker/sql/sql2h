@@ -1,0 +1,15 @@
+#!/usr/bin/awk -f
+BEGIN {
+    fname = ARGV[1]
+    sub("\.sql$", "", fname)
+    print "const static char* sql_" fname " = {"
+}
+
+{
+    print "    \""$0"\\n\""
+}
+
+END {
+    print "};"
+    print "sqlite3_stmt* stmt_" fname ";"
+}

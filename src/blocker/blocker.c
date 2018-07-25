@@ -28,6 +28,9 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <sqlite3.h>
+#include "queries.h"
+
 #include "blocklist.h"
 #include "sandbox.h"
 #include "simclist.h"
@@ -69,6 +72,8 @@ static void finishup(void);
 static void report_address(attack_t attack);
 /* cleanup false-alarm attackers from limbo list (ones with too few attacks in too much time) */
 static void purge_limbo_stale(void);
+
+sqlite3 *db;
 
 static void my_pidfile_create() {
     FILE *p = fopen(opts.my_pidfile, "w");
@@ -117,6 +122,20 @@ int main(int argc, char *argv[]) {
     list_attributes_seeker(& offenders, attack_addr_seeker);
     list_attributes_comparator(& offenders, attackt_whenlast_comparator);
 
+    if (!sqlite3_threadsafe())
+        abort();
+
+    if (sqlite3_open("test.db", &db) != SQLITE_OK) {
+        puts("problem opening db");
+        puts(sqlite3_errmsg(db));
+        exit(1);
+    }
+    if (sqlite3_exec(db, sql_init, NULL, NULL, NULL)) {
+        puts("problem init");
+        puts(sqlite3_errmsg(db));
+    }
+    db_prepare_all();
+
     // Initialize whitelist before parsing arguments.
     whitelist_init();
 
@@ -142,8 +161,6 @@ int main(int argc, char *argv[]) {
     signal(SIGHUP, sigfin_handler);
     signal(SIGINT, sigfin_handler);
     atexit(finishup);
-
-    sandbox_init();
 
     /* whitelist localhost */
     if (whitelist_add("127.0.0.1") != 0) {
@@ -209,6 +226,29 @@ static void report_address(attack_t attack) {
     /* clean list from stale entries */
     purge_limbo_stale();
 
+    int ret;
+    sqlite3_reset(stmt_add_attacker);
+    sqlite3_bind_text(stmt_add_attacker, 1, attack.address.value, -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt_add_attacker, 2, attack.address.kind);
+    ret = sqlite3_step(stmt_add_attacker);
+    if (ret != SQLITE_DONE) {
+        puts("could not insert attacker");
+        puts(sqlite3_errmsg(db));
+        return;
+    }
+
+    sqlite3_reset(stmt_get_id);
+    sqlite3_bind_text(stmt_get_id, 1, attack.address.value, -1, SQLITE_STATIC);
+    ret = sqlite3_step(stmt_get_id);
+    if (ret != SQLITE_ROW) {
+        puts("could not get attacker id");
+        puts(sqlite3_errmsg(db));
+        return;
+    }
+    int id = sqlite3_column_int(stmt_get_id, 0);
+    int blocked = sqlite3_column_int(stmt_get_id, 1);
+    printf("id %d blocked %d\n", id, blocked);
+
     /* address already blocked? (can happen for 100 reasons) */
     if (blocklist_contains(attack)) {
         sshguard_log(LOG_INFO, "%s has already been blocked.",
@@ -227,6 +267,17 @@ static void report_address(attack_t attack) {
                  attack.address.value, attack.service,
                  attack.dangerousness);
 
+    sqlite3_reset(stmt_add_attack);
+    sqlite3_bind_int(stmt_add_attack, 1, id);
+    sqlite3_bind_int(stmt_add_attack, 2, attack.service);
+    sqlite3_bind_int(stmt_add_attack, 3, attack.dangerousness);
+    ret = sqlite3_step(stmt_add_attack);
+    if (ret != SQLITE_DONE) {
+        puts("could not add attack");
+        puts(sqlite3_errmsg(db));
+        return;
+    }
+
     /* search entry in list */
     tmpent = list_seek(& limbo, & attack.address);
     if (tmpent == NULL) { /* entry not already in list, add it */
@@ -240,6 +291,17 @@ static void report_address(attack_t attack) {
         tmpent->numhits++;
         tmpent->cumulated_danger += attack.dangerousness;
     }
+
+    sqlite3_reset(stmt_get_score_since_last_block);
+    sqlite3_bind_int(stmt_get_score_since_last_block, 1, id);
+    ret = sqlite3_step(stmt_get_score_since_last_block);
+    if (ret != SQLITE_ROW) {
+        puts("could not get last attacks");
+        puts(sqlite3_errmsg(db));
+        return;
+    }
+    int cum_since = sqlite3_column_int(stmt_get_score_since_last_block, 0);
+    printf("cum_since %d, %d\n", cum_since, tmpent->cumulated_danger);
 
     if (tmpent->cumulated_danger < opts.abuse_threshold) {
         /* do nothing now, just keep an eye on this guy */
@@ -274,6 +336,17 @@ static void report_address(attack_t attack) {
     /* At this stage, the guy (in tmpent) is offender, and we'll block it anyway. */
 
     /* Let's see if we _also_ need to blacklist it. */
+    sqlite3_reset(stmt_get_cum_score);
+    sqlite3_bind_int(stmt_get_cum_score, 1, id);
+    ret = sqlite3_step(stmt_get_cum_score);
+    if (ret != SQLITE_ROW) {
+        puts("could not get cum score");
+        puts(sqlite3_errmsg(db));
+        return;
+    }
+    int cum = sqlite3_column_int(stmt_get_cum_score, 0);
+    printf("cum %d, %d\n", cum, offenderent->cumulated_danger);
+
     if (opts.blacklist_filename != NULL &&
         offenderent->cumulated_danger >= opts.blacklist_threshold) {
         /* this host must be blacklisted -- blocked and never unblocked */
@@ -291,6 +364,16 @@ static void report_address(attack_t attack) {
     }
     list_sort(& offenders, -1);
     log_block(tmpent, offenderent);
+
+    sqlite3_reset(stmt_add_block);
+    sqlite3_bind_int(stmt_add_block, 1, id);
+    sqlite3_bind_int64(stmt_add_block, 2, tmpent->whenlast + tmpent->pardontime);
+    ret = sqlite3_step(stmt_add_block);
+    if (ret != SQLITE_DONE) {
+        puts("could not add block");
+        puts(sqlite3_errmsg(db));
+        return;
+    }
 
     /* append blocked attacker to the blocked list, and remove it from the pending list */
     blocklist_add(tmpent);
@@ -316,6 +399,8 @@ static void finishup(void) {
             exit_sig == SIGHUP ? "SIGHUP" : "signal");
     whitelist_fin();
     closelog();
+    db_finalize_all();
+    sqlite3_close(db);
 }
 
 static void sigfin_handler(int sig) {
