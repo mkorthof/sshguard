@@ -47,8 +47,6 @@ void fw_release(const char address[static 1], int kind) {
  * unblocking persisted attacks when SSHGuard is just starting up.
  */
 void unblock_expired(bool release) {
-    attacker_t *tmpel;
-
     int ret;
     sqlite3_reset(stmt_get_score_since_last_block);
     do {
@@ -57,43 +55,14 @@ void unblock_expired(bool release) {
         int id = sqlite3_column_int(stmt_get_releases, 0);
         const unsigned char* address = sqlite3_column_text(stmt_get_releases, 1);
         int type = sqlite3_column_int(stmt_get_releases, 2);
-        printf("release id %d, %s, %d\n", id, address, type);
+        if (release) {
+            sshguard_log(LOG_DEBUG, "unblocking %s", address);
+            fw_release(address, type);
+        }
         sqlite3_reset(stmt_release);
         sqlite3_bind_int(stmt_release, 1, id);
         sqlite3_step(stmt_release);
     } while (ret == SQLITE_ROW);
-
-    time_t now = time(NULL);
-
-    pthread_testcancel();
-    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &ret);
-    pthread_mutex_lock(&list_mutex);
-
-    for (unsigned int pos = 0; pos < list_size(&hell); pos++) {
-        tmpel = list_get_at(&hell, pos);
-        /* skip blacklisted hosts (pardontime = infinite/0) */
-        if (tmpel->pardontime == 0)
-            continue;
-        /* process hosts with finite pardon time */
-        if (now - tmpel->whenlast > tmpel->pardontime) {
-            /* pardon time passed, release block */
-            if (release) {
-                sshguard_log(LOG_DEBUG, "%s: unblocking after %lld secs",
-                             tmpel->attack.address.value,
-                             (long long)(now - tmpel->whenlast));
-                fw_release(tmpel->attack.address.value, tmpel->attack.address.kind);
-            }
-            list_delete_at(&hell, pos);
-            free(tmpel);
-            /* element removed, next element is at current index (don't step
-             * pos) */
-            pos--;
-        }
-    }
-
-    pthread_mutex_unlock(&list_mutex);
-    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &ret);
-    pthread_testcancel();
 }
 
 static void *unblock_loop() {
@@ -109,31 +78,12 @@ static void *unblock_loop() {
 
 void blocklist_init() {
     pthread_t tid;
-    list_init(&hell);
-    list_attributes_seeker(&hell, attack_addr_seeker);
 
     /* start thread for purging stale blocked addresses */
-    pthread_mutex_init(&list_mutex, NULL);
     if (pthread_create(&tid, NULL, unblock_loop, NULL) != 0) {
         perror("pthread_create()");
         exit(2);
     }
-}
-
-bool blocklist_contains(attack_t attack) {
-    attacker_t *tmpent = NULL;
-    pthread_mutex_lock(&list_mutex);
-    tmpent = list_seek(&hell, &attack.address);
-    pthread_mutex_unlock(&list_mutex);
-    return tmpent != NULL;
-}
-
-void blocklist_add(attacker_t *tmpent) {
-    fw_block(tmpent->attack.address.value, tmpent->attack.address.kind);
-
-    pthread_mutex_lock(&list_mutex);
-    list_append(&hell, tmpent);
-    pthread_mutex_unlock(&list_mutex);
 }
 
 static void block_list(list_t *list) {

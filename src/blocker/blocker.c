@@ -42,27 +42,6 @@
 /** Keep track of the exit signal received. */
 static volatile sig_atomic_t exit_sig = 0;
 
-/*      FUNDAMENTAL DATA STRUCTURES         */
-/* These lists are all lists of attacker_t structures.
- * limbo and hell maintain "temporary" entries: in limbo, entries are deleted
- * when the address is detected to have abused a service (right after it is
- * blocked); in hell, it is deleted when the address is released.
- *
- * The list offenders maintains a permanent history of the abuses of
- * attackers, their first and last attempt, the number of abuses etc. These
- * are maintained for entire runtime. When the number of abuses exceeds a
- * limit, an address might be blacklisted (if blacklisting is enabled with
- * -b). After blacklisting, the block of an attacker is released, because it
- *  has already been blocked permanently.
- *
- *  The invariant of "offenders" is: it is sorted in decreasing order of the
- *  "whenlast" field.
- */
-/* list of addresses that failed some times, but not enough to get blocked */
-list_t limbo;
-/* list of offenders (addresses already blocked in the past) */
-list_t offenders;
-
 /* handler for termination-related signals */
 static void sigfin_handler();
 /* called at exit(): flush blocked addresses and finalize subsystems */
@@ -70,8 +49,6 @@ static void finishup(void);
 
 /* handle an attack: addr is the author, addrkind its address kind, service the attacked service code */
 static void report_address(attack_t attack);
-/* cleanup false-alarm attackers from limbo list (ones with too few attacks in too much time) */
-static void purge_limbo_stale(void);
 
 sqlite3 *db;
 
@@ -108,33 +85,17 @@ static void init_log(int debug) {
     openlog("sshguard", flags, dest);
 }
 
+static void sqlite_perror(const char msg[static 1]) {
+    fprintf(stderr, "%s: %s\n", msg, sqlite3_errmsg(db));
+}
+
 int main(int argc, char *argv[]) {
     int sshg_debugging = (getenv("SSHGUARD_DEBUG") != NULL);
     init_log(sshg_debugging);
-
     srand(time(NULL));
-
-    /* pending, blocked, and offender address lists */
-    list_init(&limbo);
-    list_attributes_seeker(& limbo, attack_addr_seeker);
-    blocklist_init();
-    list_init(&offenders);
-    list_attributes_seeker(& offenders, attack_addr_seeker);
-    list_attributes_comparator(& offenders, attackt_whenlast_comparator);
 
     if (!sqlite3_threadsafe())
         abort();
-
-    if (sqlite3_open("test.db", &db) != SQLITE_OK) {
-        puts("problem opening db");
-        puts(sqlite3_errmsg(db));
-        exit(1);
-    }
-    if (sqlite3_exec(db, sql_init, NULL, NULL, NULL)) {
-        puts("problem init");
-        puts(sqlite3_errmsg(db));
-    }
-    db_prepare_all();
 
     // Initialize whitelist before parsing arguments.
     whitelist_init();
@@ -148,13 +109,24 @@ int main(int argc, char *argv[]) {
         atexit(my_pidfile_destroy);
     }
 
-    // Initialize firewall
-    printf("flushonexit\n");
-    fflush(stdout);
-
+    const char* dbname;
     if (opts.blacklist_filename != NULL) {
-        blacklist_load_and_block();
+        dbname = opts.blacklist_filename;
+    } else {
+        dbname = ":memory:";
     }
+    if (sqlite3_open(dbname, &db) != SQLITE_OK) {
+        sqlite_perror("failed to open database");
+        exit(1);
+    }
+
+    if (sqlite3_exec(db, sql_init, NULL, NULL, NULL)) {
+        sqlite_perror("failed to initialize database");
+        fprintf(stderr, "If %s is in an old format, please convert it.\n",
+                dbname);
+        exit(1);
+    }
+    db_prepare_all();
 
     /* termination signals */
     signal(SIGTERM, sigfin_handler);
@@ -167,8 +139,24 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Could not whitelist localhost. Terminating...\n");
         exit(1);
     }
-
     whitelist_conf_fin();
+
+    // Initialize firewall
+    printf("flushonexit\n");
+    fflush(stdout);
+
+    unblock_expired(false);
+    int ret;
+    sqlite3_reset(stmt_get_initial_blocks);
+    do {
+        ret = sqlite3_step(stmt_get_initial_blocks);
+        if (ret == SQLITE_DONE) break;
+        const unsigned char* address = sqlite3_column_text(stmt_get_initial_blocks, 0);
+        int type = sqlite3_column_int(stmt_get_initial_blocks, 1);
+        fw_block(address, type);
+    } while (ret == SQLITE_ROW);
+    
+    blocklist_init();
 
     sshguard_log(LOG_INFO, "Now monitoring attacks.");
 
@@ -190,41 +178,16 @@ int main(int argc, char *argv[]) {
     }
 }
 
-void log_block(attacker_t *tmpent, attacker_t *offenderent) {
-    char time_msg[128] = "forever";
-    const time_t time = tmpent->pardontime;
-
-    unsigned int subnet_size = fw_block_subnet_size(tmpent->attack.address.kind);
-    if (time > 0) {
-        if (snprintf(time_msg, sizeof(time_msg), "for %lld secs", (long long)time) < 0) {
-            abort();
-        }
-    }
-    sshguard_log(LOG_WARNING, "Blocking \"%s/%u\" %s (%u attacks in %lld "
-                              "secs, after %d abuses over %lld secs.)",
-                 tmpent->attack.address.value, subnet_size, time_msg, tmpent->numhits,
-                 (long long)(tmpent->whenlast - tmpent->whenfirst),
-                 offenderent->numhits,
-                 (long long)(offenderent->whenlast - offenderent->whenfirst));
-}
-
 /*
  * This function is called every time an attack pattern is matched.
  * It does the following:
- * 1) update the attacker infos (counter, timestamps etc)
- *      --OR-- create them if first sight.
+ * 1) update the attacker info
  * 2) block the attacker, if attacks > threshold (abuse)
  * 3) blacklist the address, if the number of abuses is excessive
  */
 static void report_address(attack_t attack) {
-    attacker_t *tmpent = NULL;
-    attacker_t *offenderent;
-
     assert(attack.address.value != NULL);
     assert(memchr(attack.address.value, '\0', sizeof(attack.address.value)) != NULL);
-
-    /* clean list from stale entries */
-    purge_limbo_stale();
 
     int ret;
     sqlite3_reset(stmt_add_attacker);
@@ -232,8 +195,7 @@ static void report_address(attack_t attack) {
     sqlite3_bind_int(stmt_add_attacker, 2, attack.address.kind);
     ret = sqlite3_step(stmt_add_attacker);
     if (ret != SQLITE_DONE) {
-        puts("could not insert attacker");
-        puts(sqlite3_errmsg(db));
+        sqlite_perror("could not insert attacker");
         return;
     }
 
@@ -241,24 +203,22 @@ static void report_address(attack_t attack) {
     sqlite3_bind_text(stmt_get_id, 1, attack.address.value, -1, SQLITE_STATIC);
     ret = sqlite3_step(stmt_get_id);
     if (ret != SQLITE_ROW) {
-        puts("could not get attacker id");
-        puts(sqlite3_errmsg(db));
+        sqlite_perror("could not get attacker id");
         return;
     }
     int id = sqlite3_column_int(stmt_get_id, 0);
     int blocked = sqlite3_column_int(stmt_get_id, 1);
-    printf("id %d blocked %d\n", id, blocked);
 
     /* address already blocked? (can happen for 100 reasons) */
-    if (blocklist_contains(attack)) {
+    if (blocked) {
         sshguard_log(LOG_INFO, "%s has already been blocked.",
-                attack.address.value);
+                     attack.address.value);
         return;
     }
 
     if (whitelist_match(attack.address.value, attack.address.kind)) {
         sshguard_log(LOG_INFO, "%s: not blocking (on whitelist)",
-                attack.address.value);
+                     attack.address.value);
         return;
     }
 
@@ -273,125 +233,56 @@ static void report_address(attack_t attack) {
     sqlite3_bind_int(stmt_add_attack, 3, attack.dangerousness);
     ret = sqlite3_step(stmt_add_attack);
     if (ret != SQLITE_DONE) {
-        puts("could not add attack");
-        puts(sqlite3_errmsg(db));
+        sqlite_perror("could not add attack");
         return;
-    }
-
-    /* search entry in list */
-    tmpent = list_seek(& limbo, & attack.address);
-    if (tmpent == NULL) { /* entry not already in list, add it */
-        /* otherwise: insert the new item */
-        tmpent = malloc(sizeof(attacker_t));
-        attackerinit(tmpent, & attack);
-        list_append(&limbo, tmpent);
-    } else {
-        /* otherwise, the entry was already existing, update with new data */
-        tmpent->whenlast = time(NULL);
-        tmpent->numhits++;
-        tmpent->cumulated_danger += attack.dangerousness;
     }
 
     sqlite3_reset(stmt_get_score_since_last_block);
     sqlite3_bind_int(stmt_get_score_since_last_block, 1, id);
     ret = sqlite3_step(stmt_get_score_since_last_block);
     if (ret != SQLITE_ROW) {
-        puts("could not get last attacks");
-        puts(sqlite3_errmsg(db));
+        sqlite_perror("could not get last attacks");
         return;
     }
     int cum_since = sqlite3_column_int(stmt_get_score_since_last_block, 0);
-    printf("cum_since %d, %d\n", cum_since, tmpent->cumulated_danger);
 
-    if (tmpent->cumulated_danger < opts.abuse_threshold) {
+    if (cum_since < opts.abuse_threshold) {
         /* do nothing now, just keep an eye on this guy */
         return;
     }
-
-    /* otherwise, we have to block it */
-    
-
-    /* find out if this is a recidivous offender to determine the
-     * duration of blocking */
-    tmpent->pardontime = opts.pardon_threshold;
-    offenderent = list_seek(& offenders, & attack.address);
-    if (offenderent == NULL) {
-        /* first time we block this guy */
-        sshguard_log(LOG_DEBUG, "%s: first block (adding as offender.)",
-                tmpent->attack.address.value);
-        offenderent = (attacker_t *)malloc(sizeof(attacker_t));
-        /* copy everything from tmpent */
-        memcpy(offenderent, tmpent, sizeof(attacker_t));
-        /* adjust number of hits */
-        offenderent->numhits = 1;
-        list_prepend(& offenders, offenderent);
-        assert(! list_empty(& offenders));
-    } else {
-        /* this is a previous offender, update dangerousness and last-hit timestamp */
-        offenderent->numhits++;
-        offenderent->cumulated_danger += tmpent->cumulated_danger;
-        offenderent->whenlast = tmpent->whenlast;
-    }
-
-    /* At this stage, the guy (in tmpent) is offender, and we'll block it anyway. */
 
     /* Let's see if we _also_ need to blacklist it. */
     sqlite3_reset(stmt_get_cum_score);
     sqlite3_bind_int(stmt_get_cum_score, 1, id);
     ret = sqlite3_step(stmt_get_cum_score);
     if (ret != SQLITE_ROW) {
-        puts("could not get cum score");
-        puts(sqlite3_errmsg(db));
+        sqlite_perror("could not get cum score");
         return;
     }
     int cum = sqlite3_column_int(stmt_get_cum_score, 0);
-    printf("cum %d, %d\n", cum, offenderent->cumulated_danger);
 
-    if (opts.blacklist_filename != NULL &&
-        offenderent->cumulated_danger >= opts.blacklist_threshold) {
-        /* this host must be blacklisted -- blocked and never unblocked */
-        tmpent->pardontime = 0;
-
-        /* insert in the blacklisted db iff enabled */
-        if (opts.blacklist_filename != NULL) {
-            blacklist_add(offenderent);
-        }
+    time_t pardontime = opts.pardon_threshold;
+    if (opts.blacklist_filename != NULL && cum >= opts.blacklist_threshold) {
+        pardontime = 2592000; // 30 days
     } else {
         /* compute blocking time wrt the "offensiveness" */
-        for (unsigned int i = 0; i < offenderent->numhits - 1; i++) {
-            tmpent->pardontime *= 2;
+        for (unsigned int i = 0; i < cum / opts.abuse_threshold; i++) {
+            pardontime *= 2;
         }
     }
-    list_sort(& offenders, -1);
-    log_block(tmpent, offenderent);
+    sshguard_log(LOG_WARNING, "blocking %s for %lu seconds",
+                 attack.address.value, pardontime);
 
     sqlite3_reset(stmt_add_block);
     sqlite3_bind_int(stmt_add_block, 1, id);
-    sqlite3_bind_int64(stmt_add_block, 2, tmpent->whenlast + tmpent->pardontime);
+    sqlite3_bind_int64(stmt_add_block, 2, time(NULL) + pardontime);
     ret = sqlite3_step(stmt_add_block);
     if (ret != SQLITE_DONE) {
-        puts("could not add block");
-        puts(sqlite3_errmsg(db));
+        sqlite_perror("could not add block");
         return;
     }
 
-    /* append blocked attacker to the blocked list, and remove it from the pending list */
-    blocklist_add(tmpent);
-    assert(list_locate(& limbo, tmpent) >= 0);
-    list_delete_at(& limbo, list_locate(& limbo, tmpent));
-}
-
-static void purge_limbo_stale(void) {
-    sshguard_log(LOG_DEBUG, "Purging old attackers.");
-    time_t now = time(NULL);
-    for (unsigned int pos = 0; pos < list_size(&limbo); pos++) {
-        attacker_t *tmpent = list_get_at(&limbo, pos);
-        if (now - tmpent->whenfirst > opts.stale_threshold) {
-            list_delete_at(&limbo, pos);
-            free(tmpent);
-            pos--;
-        }
-    }
+    fw_block(attack.address.value, attack.address.kind);
 }
 
 static void finishup(void) {
