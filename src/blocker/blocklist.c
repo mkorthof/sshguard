@@ -26,21 +26,24 @@ unsigned int fw_block_subnet_size(int inet_family) {
     assert(0);
 }
 
-static void fw_block(const attack_t *attack) {
-    unsigned int subnet_size = fw_block_subnet_size(attack->address.kind);
-
-    printf("block %s %d %u\n", attack->address.value, attack->address.kind, subnet_size);
+void fw_block(const char address[static 1], int kind) {
+    unsigned int subnet_size = fw_block_subnet_size(kind);
+    printf("block %s %d %u\n", address, kind, subnet_size);
     fflush(stdout);
 }
 
-static void fw_release(const attack_t *attack) {
-    unsigned int subnet_size = fw_block_subnet_size(attack->address.kind);
-
-    printf("release %s %d %u\n", attack->address.value, attack->address.kind, subnet_size);
+void fw_release(const char address[static 1], int kind) {
+    unsigned int subnet_size = fw_block_subnet_size(kind);
+    printf("release %s %d %u\n", address, kind, subnet_size);
     fflush(stdout);
 }
 
-static void unblock_expired() {
+/**
+ * Remove expired attackers from the block list, and if release is true,
+ * unblock them from the firewall. Setting release to false is useful for
+ * unblocking persisted attacks when SSHGuard is just starting up.
+ */
+void unblock_expired(bool release) {
     attacker_t *tmpel;
     int ret;
     time_t now = time(NULL);
@@ -57,10 +60,12 @@ static void unblock_expired() {
         /* process hosts with finite pardon time */
         if (now - tmpel->whenlast > tmpel->pardontime) {
             /* pardon time passed, release block */
-            sshguard_log(LOG_DEBUG, "%s: unblocking after %lld secs",
-                         tmpel->attack.address.value,
-                         (long long)(now - tmpel->whenlast));
-            fw_release(&tmpel->attack);
+            if (release) {
+                sshguard_log(LOG_DEBUG, "%s: unblocking after %lld secs",
+                             tmpel->attack.address.value,
+                             (long long)(now - tmpel->whenlast));
+                fw_release(tmpel->attack.address.value, tmpel->attack.address.kind);
+            }
             list_delete_at(&hell, pos);
             free(tmpel);
             /* element removed, next element is at current index (don't step
@@ -78,7 +83,7 @@ static void *unblock_loop() {
     while (1) {
         /* wait some time, at most opts.pardon_threshold/3 + 1 sec */
         sleep(1 + ((unsigned int)rand() % (1 + opts.pardon_threshold / 2)));
-        unblock_expired();
+        unblock_expired(true);
     }
 
     pthread_exit(NULL);
@@ -107,7 +112,7 @@ bool blocklist_contains(attack_t attack) {
 }
 
 void blocklist_add(attacker_t *tmpent) {
-    fw_block(&tmpent->attack);
+    fw_block(tmpent->attack.address.value, tmpent->attack.address.kind);
 
     pthread_mutex_lock(&list_mutex);
     list_append(&hell, tmpent);
@@ -118,7 +123,7 @@ static void block_list(list_t *list) {
     list_iterator_start(list);
     while (list_iterator_hasnext(list)) {
         attacker_t *next = list_iterator_next(list);
-        fw_block(&next->attack);
+        fw_block(next->attack.address.value, next->attack.address.kind);
     }
     list_iterator_stop(list);
 }
