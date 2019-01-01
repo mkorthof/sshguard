@@ -13,6 +13,7 @@ sshg_blocker_SOURCES = \
 	blocklist.h \
 	fnv.h \
 	hash_32a.c \
+	queries.h \
 	sshguard_blacklist.c \
 	sshguard_blacklist.h \
 	sshguard_log.h \
