@@ -279,6 +279,9 @@ WORDPRESS_LOGIN            .*"/wp-login"(\.php)?
  /* HTTP probes for common web services. */
 <clf_request>" \""{HTTP_REQUEST}" "{HTTP_BOTSEARCH}" "{HTTP_VERSION}"\" "{HTTP_CLIERROR}.+ { BEGIN(INITIAL); return CLFWEBPROBES_BOTSEARCH_SUFF; }
 
+/* pfSense */
+.+"webConfigurator authentication error for user '"{WORD}"' from: " { return PFSENSE_AUTH_FAIL; }
+
  /* WordPress.
     HTTP 200 OK responses to /wp-login.php via POST are failed requests, but GET or 302 aren’t. */
 <clf_request>" \"POST "{WORDPRESS_LOGIN}" "{HTTP_VERSION}"\" 200".+  { BEGIN(INITIAL); return CLF_WORDPRESS_SUFF; }

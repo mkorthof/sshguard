@@ -100,6 +100,8 @@ static void yyerror(attack_t *, const char *);
 %token CLF_UNAUTHOIRIZED_PREF CLF_UNAUTHOIRIZED_SUFF
 /* CLF, common webapp probes */
 %token CLFWEBPROBES_BOTSEARCH_SUFF
+/* pfSense WebGUI authentication failures */
+%token PFSENSE_AUTH_FAIL
 /* CLF, WordPress brute-force attacks */
 %token CLF_WORDPRESS_SUFF
 /* OpenSMTPD */
@@ -185,6 +187,7 @@ msg_single:
     | cockpitmsg        {   attack->service = SERVICES_COCKPIT; }
     | clfunauhtdmsg     {   attack->service = SERVICES_CLF_UNAUTH; }
     | clfwebprobesmsg   {   attack->service = SERVICES_CLF_PROBES; }
+    | pfsenseauthfail   {   attack->service = SERVICES_PFSENSE; }
     | clfwordpressmsg   {   attack->service = SERVICES_CLF_WORDPRESS; }
     | opensmtpdmsg      {   attack->service = SERVICES_OPENSMTPD; }
     | couriermsg        {   attack->service = SERVICES_COURIER; }
@@ -340,6 +343,11 @@ clfwebprobesmsg:
 /* attack rules against WordPress */
 clfwordpressmsg:
     addr CLF_REQUEST_PREF CLF_WORDPRESS_SUFF
+    ;
+
+/* attack rules against pfSense */
+pfsenseauthfail:
+    PFSENSE_AUTH_FAIL addr
     ;
 
 /* opensmtpd */
