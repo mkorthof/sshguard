@@ -279,7 +279,7 @@ WORDPRESS_LOGIN            .*"/wp-login"(\.php)?
  /* HTTP probes for common web services. */
 <clf_request>" \""{HTTP_REQUEST}" "{HTTP_BOTSEARCH}" "{HTTP_VERSION}"\" "{HTTP_CLIERROR}.+ { BEGIN(INITIAL); return CLFWEBPROBES_BOTSEARCH_SUFF; }
 
-/* pfSense */
+ /* pfSense */
 .+"webConfigurator authentication error for user '"{WORD}"' from: " { return PFSENSE_AUTH_FAIL; }
 
  /* WordPress.
