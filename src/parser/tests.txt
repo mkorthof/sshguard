@@ -476,4 +476,8 @@ Failed authentication attempt for blabla from 213.60.123.190
 500 213.60.123.190 4 10
 M
 
+# OpenSSH Portshare
+2019-10-21T23:07:09+0200 [stdout#info] [OVPN 0] OUT: 'Mon Oct 21 21:07:09 2019 192.168.0.1:28288 SIGTERM[soft,port-share-redirect] received, client-instance exiting'
+410 192.168.0.1 4 10
+M
 

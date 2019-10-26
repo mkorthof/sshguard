@@ -27,6 +27,7 @@ static const struct service_s services[] = {
     {SERVICES_CLF_WORDPRESS, "Wordpress"},
     {SERVICES_OPENVPN, "OpenVPN"},
     {SERVICES_GITEA, "Gitea"},
+    {SERVICES_OPENVPN_PS, "OpenVPN Portshare"},
 };
 
 const char *service_to_name(enum service code) {
